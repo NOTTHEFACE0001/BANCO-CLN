@@ -1509,5 +1509,10 @@ async def banco(interaction: discord.Interaction):
 
 # ══════════════════════════════════════════════════════════════
 # 🚀 INICIAR BOT
+import os
+
+# Al final de tu archivo
+TOKEN = os.environ.get("TOKEN")
+bot.run(TOKEN)
 # ══════════════════════════════════════════════════════════════
 bot.run(TOKEN)
