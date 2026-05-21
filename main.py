@@ -14,7 +14,6 @@ def run():
 def keep_alive():
     t = Thread(target=run)
     t.start()
-  """
 ╔══════════════════════════════════════════════════════════════╗
 ║       🏦 BANCO ALIANZA SANTANDER — Gran Chile RP            ║
 ║                     Bot de Discord                           ║
