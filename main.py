@@ -24,12 +24,12 @@ def keep_alive():
 # pip install discord.py
 # CONFIGURACIÓN:
 
-CONFIGURACIÓN:
-  Cambia TOKEN, CLIENT_ID y GUILD_ID abajo antes de ejecutar.
+#CONFIGURACIÓN:
+  #Cambia TOKEN, CLIENT_ID y GUILD_ID abajo antes de ejecutar.
 
-EJECUTAR:
-  python main.py
-"""
+#EJECUTAR:
+  #python main.py
+
 from flask import Flask
 from threading import Thread
 
