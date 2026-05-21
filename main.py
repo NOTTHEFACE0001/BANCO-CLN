@@ -1,3 +1,4 @@
+# Asegúrate de que no haya ni un solo espacio antes de cada palabra
 from flask import Flask
 from threading import Thread
 
@@ -8,11 +9,11 @@ def home():
     return "¡Bot de Gran Chile RP Online!"
 
 def run():
-  app.run(host='0.0.0.0', port=10000)
+    app.run(host='0.0.0.0', port=10000)
 
 def keep_alive():
     t = Thread(target=run)
-    t.start() 
+    t.start()
   """
 ╔══════════════════════════════════════════════════════════════╗
 ║       🏦 BANCO ALIANZA SANTANDER — Gran Chile RP            ║
