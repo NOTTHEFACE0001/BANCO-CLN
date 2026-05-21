@@ -1262,7 +1262,7 @@ class ModalCreditoView(discord.ui.Modal, title="💎 Solicitar Tarjeta de Crédi
     ingresos = discord.ui.TextInput(label="Ingresos Mensuales (CLP)", placeholder="Ej: 500000")
     motivo = discord.ui.TextInput(
         label="Motivo de la Solicitud",
-        style=discord.TextInputStyle.paragraph,
+        discord.TextStyle.paragraph
         placeholder="¿Para qué usarás la tarjeta de crédito?"
     )
 
