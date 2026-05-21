@@ -220,7 +220,7 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-guild_obj = discord.Object(id=GUILD_ID)
+guild_obj = discord.Object(id=1486083692089704619)
 
 @bot.event
 async def on_ready():
