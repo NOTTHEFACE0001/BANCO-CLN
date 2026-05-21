@@ -204,7 +204,7 @@ def get_precios_acciones(db: dict) -> dict:
     return db["acciones_precios"]
 
 def agregar_xp(user, monto): # O como se llame tu función
-    """
+    
     Agrega XP y retorna (nivel_actual, subio_de_nivel)
     
     # Aquí sigue tu código normal...
