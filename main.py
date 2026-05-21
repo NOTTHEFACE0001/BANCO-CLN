@@ -1541,11 +1541,7 @@ async def banco(interaction: discord.Interaction):
 
 # ══════════════════════════════════════════════════════════════
 # 🚀 INICIAR BOT
-import os
 keep_alive()
-bot.run(TOKEN)
-# Al final de tu archivo
+
 TOKEN = os.environ.get("TOKEN")
-bot.run(TOKEN)
-# ══════════════════════════════════════════════════════════════
 bot.run(TOKEN)
