@@ -1,15 +1,15 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║      🏦 BANCO CENTRAL DE CHILE — Gran Chile RP             ║
-║                    Bot de Discord                            ║
-║                 Archivo: main.py                             ║
+║        🏦 BANCO Alianza Cordillera — Gran Chile RP            ║
+║                     Bot de Discord                           ║
+║                    Archivo: main.py                          ║
 ╚══════════════════════════════════════════════════════════════╝
 
 INSTALACIÓN:
   pip install discord.py
 
 CONFIGURACIÓN:
-  Cambia TOKEN y GUILD_ID abajo antes de ejecutar.
+  Cambia TOKEN, CLIENT_ID y GUILD_ID abajo antes de ejecutar.
 
 EJECUTAR:
   python main.py
@@ -31,13 +31,13 @@ GUILD_ID = 1234567890  # ID de tu servidor (número, sin comillas)
 # ══════════════════════════════════════════════════════════════
 # 🎨 CONSTANTES
 # ══════════════════════════════════════════════════════════════
-COLOR_PRINCIPAL   = 0x003087
-COLOR_EXITO       = 0x00A650
-COLOR_ERROR       = 0xE63946
-COLOR_ADVERTENCIA = 0xFFD700
-COLOR_INFO        = 0x4FC3F7
-COLOR_CRIPTO       = 0xF7931A
-COLOR_PREMIUM     = 0x7B2FBE
+COLOR_PRINCIPAL  = 0x003087
+COLOR_EXITO      = 0x00A650
+COLOR_ERROR      = 0xE63946
+COLOR_ADVERTENCIA= 0xFFD700
+COLOR_INFO       = 0x4FC3F7
+COLOR_CRIPTO     = 0xF7931A
+COLOR_PREMIUM    = 0x7B2FBE
 
 TASA_CAMBIO = 950  # 1 USD = 950 CLP
 
@@ -174,6 +174,7 @@ def get_precios_acciones(db: dict) -> dict:
     return db["acciones_precios"]
 
 def agregar_xp(user: dict, cantidad: int) -> tuple[int, bool]:
+    """Agrega XP y retorna (nivel_actual, subio_de_nivel)"""
     user["experiencia"] = user.get("experiencia", 0) + cantidad
     nivel_viejo = user.get("nivel", 1)
     nivel_nuevo = 1 + int(user["experiencia"] ** 0.4 / 3)
@@ -618,297 +619,673 @@ async def cripto_portafolio(interaction: discord.Interaction):
     db = cargar_db()
     precios = get_precios_cripto(db)
     entradas = [(k, v) for k, v in user.get("cripto", {}).items() if v > 0]
-    
+    em = discord.Embed(title="💼 Mi Portafolio Cripto", color=COLOR_CRIPTO)
     if not entradas:
-        return await interaction.response.send_message("❌ No tienes ninguna criptomoneda en tu portafolio.", ephemeral=True)
-        
-    em = discord.Embed(title=f"💼 Mi Portafolio Cripto — {interaction.user.display_name}", color=COLOR_CRIPTO)
-    total_clp = 0
-    for k, v in entradas:
-        valor_actual = int(v * precios.get(k, 0))
-        total_clp += valor_actual
-        em.add_field(name=f"🪙 {k}", value=f"Monto: `{v:.6f}`\nValor: **{clp(valor_actual)}**", inline=True)
-        
-    em.add_field(name="📊 Valor Total de Activos", value=f"**{clp(total_clp)}**", inline=False)
+        em.description = "*Sin criptomonedas. Usa `/cripto comprar` para invertir.*"
+    else:
+        total = 0
+        for k, v in entradas:
+            val = int(v * precios.get(k, 0))
+            total += val
+            em.add_field(name=f"🪙 {k}", value=f"Cant: **{v:.6f}**\nValor: **{clp(val)}**", inline=True)
+        em.add_field(name="📊 Valor Total", value=f"**{clp(total)}**", inline=False)
     em.set_footer(text="🏦 Banco Central de Chile")
+    await interaction.response.send_message(embed=em, ephemeral=True)
+
+@grupo_cripto.command(name="grafica", description="Generar el gráfico de precio histórico")
+@app_commands.describe(moneda="BTC, ETH, SOL, DOGE o ADA")
+async def cripto_grafica(interaction: discord.Interaction, moneda: str):
+    moneda = moneda.upper()
+    db = cargar_db()
+    precios = get_precios_cripto(db)
+    if moneda not in precios:
+        return await interaction.response.send_message("❌ Moneda no encontrada.", ephemeral=True)
+    base = precios[moneda]
+    dias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Hoy"]
+    puntos = [int(base * (1 + random.uniform(-0.08, 0.08))) for _ in range(7)]
+    grafica = "\n".join(f"`{dias[i]}` → **{clp(p)}**" for i, p in enumerate(puntos))
+    tendencia = "📈" if puntos[-1] >= puntos[0] else "📉"
+    variacion = ((puntos[-1] - puntos[0]) / puntos[0]) * 100
+    em = discord.Embed(title=f"📊 {tendencia} {moneda} — Últimos 7 días", color=COLOR_CRIPTO, description=grafica)
+    em.add_field(name="Variación semanal", value=f"{variacion:+.2f}%", inline=True)
+    em.add_field(name="Precio actual", value=clp(precios[moneda]), inline=True)
+    em.set_footer(text="🏦 Banco Central de Chile • Datos simulados")
     await interaction.response.send_message(embed=em, ephemeral=True)
 
 bot.tree.add_command(grupo_cripto)
 
 # ══════════════════════════════════════════════════════════════
-# 📊 /acciones
+# 📈 /bolsa
 # ══════════════════════════════════════════════════════════════
-grupo_acciones = app_commands.Group(name="acciones", description="📊 Mercado de acciones de empresas chilenas", guild_ids=[GUILD_ID])
+grupo_bolsa = app_commands.Group(name="bolsa", description="📈 Mercado de valores", guild_ids=[GUILD_ID])
 
-@grupo_acciones.command(name="mercado", description="Ver precios de acciones")
-async def acciones_mercado(interaction: discord.Interaction):
+@grupo_bolsa.command(name="ver", description="Ver el mercado de valores actual")
+async def bolsa_ver(interaction: discord.Interaction):
     db = cargar_db()
     precios = get_precios_acciones(db)
-    em = discord.Embed(title="📊 Bolsa de Comercio (Chile RP)", color=COLOR_INFO, description="Precios de acciones por unidad")
+    em = discord.Embed(title="📈 Bolsa de Valores — Gran Chile RP", color=0x00A650,
+        description="Acciones chilenas disponibles (precio por acción en CLP)")
     for k, v in precios.items():
-        em.add_field(name=f"📈 {k}", value=clp(v), inline=True)
-    em.set_footer(text="🏦 Actualizado automáticamente cada hora")
+        em.add_field(name=f"🏢 {k}", value=clp(v), inline=True)
+    em.set_footer(text="🏦 Banco Central de Chile • Precios actualizados cada hora")
+    em.timestamp = datetime.now()
     await interaction.response.send_message(embed=em)
 
-@grupo_acciones.command(name="comprar", description="Comprar acciones comerciales")
-@app_commands.describe(empresa="COPEC, FALABELLA, BCI, CMPC, ENTEL, LATAM, CENCOSUD", cantidad="Cantidad a comprar")
-async def acciones_comprar(interaction: discord.Interaction, empresa: str, cantidad: int):
+@grupo_bolsa.command(name="comprar", description="Comprar acciones")
+@app_commands.describe(empresa="COPEC, FALABELLA, BCI, CMPC, ENTEL, LATAM, CENCOSUD", cantidad="Número de acciones")
+async def bolsa_comprar(interaction: discord.Interaction, empresa: str, cantidad: int):
     empresa = empresa.upper()
     db = cargar_db()
     precios = get_precios_acciones(db)
     if empresa not in precios:
-        return await interaction.response.send_message("❌ Empresa no válida.", ephemeral=True)
-    if cantidad <= 0:
-        return await interaction.response.send_message("❌ La cantidad debe ser mayor a 0.", ephemeral=True)
-        
-    costo = precios[empresa] * cantidad
+        return await interaction.response.send_message(f"❌ Empresa no encontrada. Opciones: **{', '.join(precios.keys())}**", ephemeral=True)
     user = get_user(interaction.user.id)
+    costo = precios[empresa] * cantidad
     if user["banco"] < costo:
-        return await interaction.response.send_message(f"❌ Saldo bancario insuficiente. Necesitas **{clp(costo)}**.", ephemeral=True)
-        
+        return await interaction.response.send_message(f"❌ Necesitas **{clp(costo)}**. Tienes **{clp(user['banco'])}**.", ephemeral=True)
     user["banco"] -= costo
     user["acciones"][empresa] = user["acciones"].get(empresa, 0) + cantidad
-    agregar_xp(user, 10)
+    agregar_xp(user, 15)
     save_user(interaction.user.id, user)
-    add_historial(interaction.user.id, "ACCIONES_COMPRA", costo, f"Compra de {cantidad} acciones de {empresa}")
-    
-    await interaction.response.send_message(embed=discord.Embed(
-        title="✅ Compra de Acciones Exitosa", color=COLOR_EXITO,
-        description=f"Adquiriste **{cantidad}** acciones de **{empresa}** por **{clp(costo)}**."
-    ), ephemeral=True)
+    add_historial(interaction.user.id, "BOLSA_COMPRA", costo, f"Compra {cantidad} acciones {empresa}")
+    em = discord.Embed(title="✅ Acciones Compradas", color=COLOR_EXITO)
+    em.add_field(name="🏢 Empresa", value=empresa, inline=True)
+    em.add_field(name="📦 Cantidad", value=f"{cantidad} acciones", inline=True)
+    em.add_field(name="💰 Pagado", value=clp(costo), inline=True)
+    em.set_footer(text="🏦 Banco Central de Chile")
+    await interaction.response.send_message(embed=em, ephemeral=True)
 
-@grupo_acciones.command(name="vender", description="Vender acciones comerciales")
-@app_commands.describe(empresa="COPEC, FALABELLA, BCI, CMPC, ENTEL, LATAM, CENCOSUD", cantidad="Cantidad a vender")
-async def acciones_vender(interaction: discord.Interaction, empresa: str, cantidad: int):
+@grupo_bolsa.command(name="vender", description="Vender acciones")
+@app_commands.describe(empresa="Empresa", cantidad="Número de acciones a vender")
+async def bolsa_vender(interaction: discord.Interaction, empresa: str, cantidad: int):
     empresa = empresa.upper()
     db = cargar_db()
     precios = get_precios_acciones(db)
     user = get_user(interaction.user.id)
-    
-    if user["acciones"].get(empresa, 0) < cantidad or cantidad <= 0:
-        return await interaction.response.send_message("❌ No posees suficientes acciones de esta empresa.", ephemeral=True)
-        
-    ganancia = precios[empresa] * cantidad
+    if user["acciones"].get(empresa, 0) < cantidad:
+        return await interaction.response.send_message(f"❌ No tienes suficientes acciones de **{empresa}**.", ephemeral=True)
+    precio_venta = int(precios.get(empresa, 0) * cantidad * random.uniform(0.95, 1.05))
     user["acciones"][empresa] -= cantidad
-    user["banco"] += ganancia
+    user["banco"] += precio_venta
+    agregar_xp(user, 15)
     save_user(interaction.user.id, user)
-    add_historial(interaction.user.id, "ACCIONES_VENTA", ganancia, f"Venta de {cantidad} acciones de {empresa}")
-    
-    await interaction.response.send_message(embed=discord.Embed(
-        title="✅ Venta de Acciones Exitosa", color=COLOR_EXITO,
-        description=f"Vendiste **{cantidad}** acciones de **{empresa}** y recibiste **{clp(ganancia)}** en tu banco."
-    ), ephemeral=True)
+    add_historial(interaction.user.id, "BOLSA_VENTA", precio_venta, f"Venta {cantidad} acciones {empresa}")
+    em = discord.Embed(title="✅ Acciones Vendidas", color=COLOR_EXITO)
+    em.add_field(name="🏢 Empresa", value=empresa, inline=True)
+    em.add_field(name="📦 Cantidad", value=f"{cantidad} acciones", inline=True)
+    em.add_field(name="💰 Recibido", value=clp(precio_venta), inline=True)
+    em.set_footer(text="🏦 Banco Central de Chile")
+    await interaction.response.send_message(embed=em, ephemeral=True)
 
-bot.tree.add_command(grupo_acciones)
+@grupo_bolsa.command(name="portafolio", description="Ver tus inversiones en bolsa")
+async def bolsa_portafolio(interaction: discord.Interaction):
+    user = get_user(interaction.user.id)
+    db = cargar_db()
+    precios = get_precios_acciones(db)
+    entradas = [(k, v) for k, v in user.get("acciones", {}).items() if v > 0]
+    em = discord.Embed(title="💼 Mi Portafolio Bolsa", color=0x00A650)
+    if not entradas:
+        em.description = "*Sin inversiones. Usa `/bolsa comprar` para invertir.*"
+    else:
+        total = 0
+        for k, v in entradas:
+            val = int(v * precios.get(k, 0))
+            total += val
+            em.add_field(name=f"🏢 {k}", value=f"Acciones: **{v}**\nValor: **{clp(val)}**", inline=True)
+        em.add_field(name="📊 Valor Total", value=f"**{clp(total)}**", inline=False)
+    em.set_footer(text="🏦 Banco Central de Chile")
+    await interaction.response.send_message(embed=em, ephemeral=True)
 
-# ══════════════════════════════════════════════════════════════
-# 📇 SISTEMA DE INTERFACES INTERACTIVAS
-# ══════════════════════════════════════════════════════════════
-class BancoMenuSelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="Registrar Identidad Civil", description="Crea tu carnet de identidad chileno en el servidor", emoji="👤"),
-            discord.SelectOption(label="Obtener Tarjeta de Débito", description="Tramita tu tarjeta para transferencias bancarias", emoji="💳"),
-            discord.SelectOption(label="Tramitar Tarjeta de Crédito", description="Obtén financiamiento con una línea de crédito base", emoji="💎"),
-            discord.SelectOption(label="Solicitar Préstamo Rápido", description="Pide un préstamo express de $50.000 CLP", emoji="📋"),
-            discord.SelectOption(label="Saldar Tarjeta de Crédito", description="Paga los saldos y deudas pendientes", emoji="💰")
-        ]
-        super().__init__(placeholder="🏦 Elige un trámite o servicio financiero...", min_values=1, max_values=1, options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        user = get_user(interaction.user.id)
-        
-        if self.values[0] == "Registrar Identidad Civil":
-            if user["registrado"]:
-                return await interaction.response.send_message("❌ Ya estás registrado formalmente en el Registro Civil.", ephemeral=True)
-            user["nombre_completo"] = f"Ciudadano {interaction.user.display_name}"
-            user["ocupacion"] = "Empleado Común"
-            user["registrado"] = True
-            save_user(interaction.user.id, user)
-            return await interaction.response.send_message(f"🇨🇱 **Registro Exitoso:** Bienvenido al sistema, **{user['nombre_completo']}**.", ephemeral=True)
-
-        if self.values[0] == "Obtener Tarjeta de Débito":
-            if user["tarjeta_debito"]:
-                return await interaction.response.send_message("❌ Tu tarjeta de débito ya se encuentra activa.", ephemeral=True)
-            user["tarjeta_debito"] = {"numero": generar_numero_tarjeta(), "creacion": datetime.now().strftime("%d/%m/%Y")}
-            save_user(interaction.user.id, user)
-            return await interaction.response.send_message(f"💳 **Tarjeta de Débito Creada:** Número asignado: `{user['tarjeta_debito']['numero']}`", ephemeral=True)
-
-        if self.values[0] == "Tramitar Tarjeta de Crédito":
-            if user["tarjeta_credito"]:
-                return await interaction.response.send_message("❌ Ya eres titular de una tarjeta de crédito comercial.", ephemeral=True)
-            user["tarjeta_credito"] = "clasica"
-            user["limite_credito"] = TIPO_TARJETA["clasica"]["limite"]
-            save_user(interaction.user.id, user)
-            return await interaction.response.send_message("🥈 **Aprobada:** Has obtenido una Tarjeta de Crédito **Clásica** con cupo inicial de $200.000 CLP.", ephemeral=True)
-
-        if self.values[0] == "Solicitar Préstamo Rápido":
-            if not user["tarjeta_debito"]:
-                return await interaction.response.send_message("❌ Requiere una tarjeta de débito activa para depositar el dinero.", ephemeral=True)
-            if len(user["prestamos"]) >= 2:
-                return await interaction.response.send_message("❌ Límite de préstamos activos alcanzado (Máximo 2).", ephemeral=True)
-            
-            monto, semanas = 50000, 2
-            total = int(monto * 1.10)
-            user["banco"] += monto
-            user["prestamos"].append({
-                "total": total, "cuota": total // semanas, "semanas_restantes": semanas, "motivo": "Préstamo Directo Express"
-            })
-            save_user(interaction.user.id, user)
-            add_historial(interaction.user.id, "PRESTAMO_OTORGADO", monto, "Préstamo Express aprobado via menú")
-            return await interaction.response.send_message(f"✅ **Aprobado:** Se agregaron {clp(monto)} a tu banco. Debes pagar {clp(total)} en {semanas} semanas.", ephemeral=True)
-
-        if self.values[0] == "Saldar Tarjeta de Crédito":
-            if user["deuda_credito"] <= 0:
-                return await interaction.response.send_message("✅ No registras deudas pendientes en tu línea crediticia.", ephemeral=True)
-            if user["banco"] < user["deuda_credito"]:
-                return await interaction.response.send_message("❌ Saldo bancario insuficiente para pagar tu deuda.", ephemeral=True)
-                
-            deuda = user["deuda_credito"]
-            user["banco"] -= deuda
-            user["deuda_credito"] = 0
-            save_user(interaction.user.id, user)
-            add_historial(interaction.user.id, "PAGO_TARJETA", -deuda, "Saldó deuda de crédito")
-            return await interaction.response.send_message("💳 **Línea de Crédito Liberada:** Tu deuda ha sido liquidada por completo.", ephemeral=True)
-
-class BancoMenuView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(BancoMenuSelect())
-
-@bot.tree.command(guild=guild_obj, name="banco", description="🏦 Abrir el panel interactivo del Banco Central")
-async def banco(interaction: discord.Interaction):
-    em = discord.Embed(
-        title="🏦 Banco Central de la República de Chile",
-        description="Bienvenido a la sucursal automatizada. Usa el menú de selección de abajo para procesar tus trámites directamente sin comandos.",
-        color=COLOR_PRINCIPAL
-    )
-    em.set_footer(text="Gran Chile RP • Estabilidad y Crecimiento Económico")
-    await interaction.response.send_message(embed=em, view=BancoMenuView(), ephemeral=True)
+bot.tree.add_command(grupo_bolsa)
 
 # ══════════════════════════════════════════════════════════════
-# 💼 COMANDOS DE TRABAJO, CRIMEN Y RECOMPENSAS
+# ₿ /bitcoin precio
 # ══════════════════════════════════════════════════════════════
-@bot.tree.command(guild=guild_obj, name="diario", description="📆 Recibir tu sueldo de asistencia diario")
+grupo_bitcoin = app_commands.Group(name="bitcoin", description="₿ Bitcoin", guild_ids=[GUILD_ID])
+
+@grupo_bitcoin.command(name="precio", description="Ver el precio actual de Bitcoin y el estado de la red")
+async def bitcoin_precio(interaction: discord.Interaction):
+    db = cargar_db()
+    precios = get_precios_cripto(db)
+    variacion = random.uniform(-8, 8)
+    em = discord.Embed(title="₿ Bitcoin — Precio Actual", color=COLOR_CRIPTO)
+    em.add_field(name="💰 Precio CLP", value=clp(precios["BTC"]), inline=True)
+    em.add_field(name="📈 Variación 24h", value=f"{variacion:+.2f}%", inline=True)
+    em.add_field(name="🌐 Estado de Red", value="🟢 Operacional", inline=True)
+    em.add_field(name="⛏️ Dificultad", value="Alta", inline=True)
+    em.add_field(name="📦 Bloque actual", value=f"#{random.randint(800000,850000):,}", inline=True)
+    em.set_footer(text="🏦 Banco Central de Chile")
+    em.timestamp = datetime.now()
+    await interaction.response.send_message(embed=em)
+
+bot.tree.add_command(grupo_bitcoin)
+
+# ══════════════════════════════════════════════════════════════
+# 💼 /colectar
+# ══════════════════════════════════════════════════════════════
+@bot.tree.command(guild=guild_obj, name="colectar", description="💼 Colectar tu salario (cada 72 horas)")
+async def colectar(interaction: discord.Interaction):
+    user = get_user(interaction.user.id)
+    ahora = datetime.now()
+    espera = timedelta(hours=72)
+    if user["ultimo_colectar"]:
+        ultimo = datetime.fromisoformat(user["ultimo_colectar"])
+        if ahora - ultimo < espera:
+            restante = espera - (ahora - ultimo)
+            h, rem = divmod(int(restante.total_seconds()), 3600)
+            m = rem // 60
+            em = discord.Embed(title="⏳ Aún no puedes colectar", color=COLOR_ERROR,
+                description=f"Podrás colectar en **{h}h {m}m**")
+            return await interaction.response.send_message(embed=em, ephemeral=True)
+    salario = random.randint(75_000, 100_000)
+    user["efectivo"] += salario
+    user["ultimo_colectar"] = ahora.isoformat()
+    user["rachas"] = user.get("rachas", 0) + 1
+    nivel, subio = agregar_xp(user, 25)
+    save_user(interaction.user.id, user)
+    add_historial(interaction.user.id, "SALARIO", salario, f"Salario cobrado {clp(salario)}")
+    em = discord.Embed(title="💼 ¡Salario Cobrado!", color=COLOR_EXITO,
+        description=f"Recibiste **{clp(salario)}** en efectivo.\n🔥 Racha: **{user['rachas']} días**" +
+                    (f"\n⭐ **¡Subiste al nivel {nivel}!**" if subio else ""))
+    em.set_footer(text="🏦 Banco Central de Chile")
+    em.timestamp = datetime.now()
+    await interaction.response.send_message(embed=em)
+
+# ══════════════════════════════════════════════════════════════
+# 🎁 /diario
+# ══════════════════════════════════════════════════════════════
+@bot.tree.command(guild=guild_obj, name="diario", description="🎁 Reclamar tu recompensa diaria")
 async def diario(interaction: discord.Interaction):
     user = get_user(interaction.user.id)
     ahora = datetime.now()
-    
+    espera = timedelta(hours=24)
     if user["ultimo_diario"]:
-        ud = datetime.strptime(user["ultimo_diario"], "%Y-%m-%d %H:%M:%S")
-        if ahora - ud < timedelta(days=1):
-            restante = timedelta(days=1) - (ahora - ud)
-            horas, rem = divmod(restante.seconds, 3600)
-            minutos, _ = divmod(rem, 60)
-            return await interaction.response.send_message(f"⏳ Ya retiraste tu bono diario. Vuelve en **{horas}h {minutos}m**.", ephemeral=True)
-
-    bono = 25000
-    user["efectivo"] += bono
-    user["ultimo_diario"] = ahora.strftime("%Y-%m-%d %H:%M:%S")
-    user["rachas"] = user.get("rachas", 0) + 1
-    agregar_xp(user, 30)
+        ultimo = datetime.fromisoformat(user["ultimo_diario"])
+        if ahora - ultimo < espera:
+            restante = espera - (ahora - ultimo)
+            h, rem = divmod(int(restante.total_seconds()), 3600)
+            m = rem // 60
+            return await interaction.response.send_message(embed=discord.Embed(title="⏳ Ya reclamaste hoy", color=COLOR_ERROR,
+                description=f"Vuelve en **{h}h {m}m**"), ephemeral=True)
+    recompensa = random.randint(20_000, 50_000)
+    user["efectivo"] += recompensa
+    user["ultimo_diario"] = ahora.isoformat()
+    agregar_xp(user, 10)
     save_user(interaction.user.id, user)
-    
-    await interaction.response.send_message(embed=discord.Embed(
-        title="📆 Bono Diario Recogido", color=COLOR_EXITO,
-        description=f"Has cobrado tu subsidio de **{clp(bono)}** en efectivo.\n🔥 Racha actual: **{user['rachas']} días**"
-    ))
+    add_historial(interaction.user.id, "DIARIO", recompensa, f"Recompensa diaria {clp(recompensa)}")
+    em = discord.Embed(title="🎁 ¡Recompensa Diaria!", color=COLOR_EXITO,
+        description=f"Recibiste **{clp(recompensa)}** en efectivo.")
+    em.set_footer(text="🏦 Banco Central de Chile")
+    await interaction.response.send_message(embed=em)
 
-@bot.tree.command(guild=guild_obj, name="trabajar", description="🛠️ Hacer jornadas de trabajo lícitas")
-async def trabajar(interaction: discord.Interaction):
+# ══════════════════════════════════════════════════════════════
+# 💼 /trabajo
+# ══════════════════════════════════════════════════════════════
+TRABAJOS = [
+    ("🚕 Taxista",        15_000, 30_000),
+    ("🚚 Repartidor",     20_000, 40_000),
+    ("👷 Construcción",   25_000, 45_000),
+    ("🏪 Cajero",         18_000, 35_000),
+    ("💻 Programador",    35_000, 70_000),
+    ("🩺 Médico",         50_000, 90_000),
+    ("⚖️ Abogado",        45_000, 80_000),
+    ("🚔 Policía",        30_000, 55_000),
+]
+
+@bot.tree.command(guild=guild_obj, name="trabajo", description="💼 Trabajar para ganar dinero (cada 4 horas)")
+async def trabajo(interaction: discord.Interaction):
     user = get_user(interaction.user.id)
     ahora = datetime.now()
-    
-    if user["ultimo_trabajo"]:
-        ut = datetime.strptime(user["ultimo_trabajo"], "%Y-%m-%d %H:%M:%S")
-        if ahora - ut < timedelta(minutes=30):
-            restante = timedelta(minutes=30) - (ahora - ut)
-            mins = restante.seconds // 60
-            return await interaction.response.send_message(f"❌ Estás cansado. Puedes volver a trabajar en **{mins} minutos**.", ephemeral=True)
-
-    empleos = [
-        ("Conductor de buses en Red Metropolitana 🚌", 15000),
-        ("Operador en minería de Cobre en Calama ⛏️", 28000),
-        ("Cajero en un local de Falabella 🛍️", 16500),
-        ("Desarrollador de software para Corfo 💻", 35000),
-        ("Guardia de seguridad de Prosegur 🛡️", 18000)
-    ]
-    
-    empleo, sueldo = random.choice(empleos)
-    user["efectivo"] += sueldo
-    user["ultimo_trabajo"] = ahora.strftime("%Y-%m-%d %H:%M:%S")
-    subio_lvl = agregar_xp(user, 25)[1]
+    espera = timedelta(hours=4)
+    if user.get("ultimo_trabajo"):
+        ultimo = datetime.fromisoformat(user["ultimo_trabajo"])
+        if ahora - ultimo < espera:
+            restante = espera - (ahora - ultimo)
+            h, rem = divmod(int(restante.total_seconds()), 3600)
+            m = rem // 60
+            return await interaction.response.send_message(embed=discord.Embed(title="⏳ Aún estás descansando", color=COLOR_ERROR,
+                description=f"Podrás trabajar en **{h}h {m}m**"), ephemeral=True)
+    trabajo_elegido = random.choice(TRABAJOS)
+    nombre, minimo, maximo = trabajo_elegido
+    ganancia = random.randint(minimo, maximo)
+    user["efectivo"] += ganancia
+    user["ultimo_trabajo"] = ahora.isoformat()
+    agregar_xp(user, 20)
     save_user(interaction.user.id, user)
-    
-    desc = f"Cumpliste con tu turno como: **{empleo}**.\n💰 **Sueldo recibido:** {clp(sueldo)}"
-    if subio_lvl: 
-        desc += f"\n\n⭐ ¡Subiste de nivel! Nivel actual: **{user['nivel']}**"
-        
-    await interaction.response.send_message(embed=discord.Embed(title="🛠️ Jornada Laboral Completada", color=COLOR_INFO, description=desc))
+    add_historial(interaction.user.id, "TRABAJO", ganancia, f"Trabajo: {nombre} → {clp(ganancia)}")
+    em = discord.Embed(title="💼 ¡Turno Completado!", color=COLOR_EXITO,
+        description=f"Trabajaste como **{nombre}** y ganaste **{clp(ganancia)}**.")
+    em.set_footer(text="🏦 Banco Central de Chile | Próximo trabajo en 4 horas")
+    await interaction.response.send_message(embed=em)
 
-@bot.tree.command(guild=guild_obj, name="crimen", description="🥷 Planificar y ejecutar un acto delictivo")
+# ══════════════════════════════════════════════════════════════
+# 🔫 /crimen
+# ══════════════════════════════════════════════════════════════
+@bot.tree.command(guild=guild_obj, name="crimen", description="🔫 Cometer un crimen de alto riesgo para ganar dinero sucio")
 async def crimen(interaction: discord.Interaction):
     user = get_user(interaction.user.id)
     ahora = datetime.now()
-    
+    espera = timedelta(hours=6)
     if user["ultimo_crimen"]:
-        uc = datetime.strptime(user["ultimo_crimen"], "%Y-%m-%d %H:%M:%S")
-        if ahora - uc < timedelta(hours=1):
-            restante = timedelta(hours=1) - (ahora - uc)
-            mins = restante.seconds // 60
-            return await interaction.response.send_message(f"🚨 La policía te sigue el rastro. Espera **{mins} minutos**.", ephemeral=True)
-
-    user["ultimo_crimen"] = ahora.strftime("%Y-%m-%d %H:%M:%S")
-    exito = random.choices([True, False], weights=[45, 55])[0] # 45% probabilidad de éxito
-    delito = random.choice(CRIMENES)
-    
+        ultimo = datetime.fromisoformat(user["ultimo_crimen"])
+        if ahora - ultimo < espera:
+            restante = espera - (ahora - ultimo)
+            h, rem = divmod(int(restante.total_seconds()), 3600)
+            m = rem // 60
+            return await interaction.response.send_message(embed=discord.Embed(title="🚔 La Policía te vigila", color=COLOR_ERROR,
+                description=f"Espera **{h}h {m}m** antes de intentar otro crimen."), ephemeral=True)
+    user["ultimo_crimen"] = ahora.isoformat()
+    crimen_elegido = random.choice(CRIMENES)
+    exito = random.random() < 0.60
     if exito:
-        botin = random.randint(50000, 200000)
-        user["efectivo"] += botin
+        ganancia = random.randint(50_000, 200_000)
+        user["efectivo"] += ganancia
+        agregar_xp(user, 30)
         save_user(interaction.user.id, user)
-        add_historial(interaction.user.id, "CRIMEN_EXITO", botin, f"Participó en {delito}")
-        await interaction.response.send_message(embed=discord.Embed(
-            title="🥷 Plan Maestro Exitoso", color=COLOR_EXITO,
-            description=f"Lograste el cometido en: **{delito}**.\n💰 **Botín obtenido:** {clp(botin)}"
-        ))
+        add_historial(interaction.user.id, "CRIMEN", ganancia, f"Crimen exitoso: {crimen_elegido}")
+        em = discord.Embed(title="🔫 ¡Crimen Exitoso!", color=0x2ECC71,
+            description=f"**{crimen_elegido}**\n\nLograste escapar con **{clp(ganancia)}** en efectivo.\n⚠️ *Cuidado, la Policía te busca...*")
     else:
-        multa = random.randint(25000, 75000)
+        multa = random.randint(30_000, 80_000)
         user["efectivo"] = max(0, user["efectivo"] - multa)
         user["penales"] = user.get("penales", 0) + 1
         save_user(interaction.user.id, user)
-        add_historial(interaction.user.id, "CRIMEN_FALLIDO", -multa, f"Multado por {delito}")
-        await interaction.response.send_message(embed=discord.Embed(
-            title="🚨 Arresto Policial", color=COLOR_ERROR,
-            description=f"Fuiste interceptado ejecutando: **{delito}**.\n⚖️ **Sanción:** Perdiste **{clp(multa)}** por fianza y se sumó a tu récord criminal."
-        ))
+        add_historial(interaction.user.id, "CRIMEN_FALLO", -multa, f"Arrestado: {crimen_elegido}")
+        em = discord.Embed(title="🚔 ¡Arrestado!", color=COLOR_ERROR,
+            description=f"**{crimen_elegido}**\n\nFuiste capturado y multado con **{clp(multa)}**.\n📋 Penales acumulados: **{user['penales']}**")
+    em.set_footer(text="🏦 Banco Central de Chile • Gran Chile RP")
+    em.timestamp = datetime.now()
+    await interaction.response.send_message(embed=em)
 
 # ══════════════════════════════════════════════════════════════
-# 📜 /historial
+# 💱 /divisa
 # ══════════════════════════════════════════════════════════════
-@bot.tree.command(guild=guild_obj, name="historial", description="📜 Ver tus últimas transacciones y movimientos")
+grupo_divisa = app_commands.Group(name="divisa", description="💱 Cambio de divisas", guild_ids=[GUILD_ID])
+
+@grupo_divisa.command(name="clp_a_usd", description="Convertir Pesos Chilenos a Dólares (CLP → USD)")
+@app_commands.describe(monto="Monto en CLP a convertir")
+async def divisa_clp_usd(interaction: discord.Interaction, monto: int):
+    user = get_user(interaction.user.id)
+    if user["banco"] < monto:
+        return await interaction.response.send_message(f"❌ Saldo insuficiente. Tienes **{clp(user['banco'])}**.", ephemeral=True)
+    resultado = round(monto / TASA_CAMBIO, 2)
+    user["banco"] -= monto
+    user["usd_banco"] += resultado
+    save_user(interaction.user.id, user)
+    add_historial(interaction.user.id, "DIVISA", monto, f"Cambio {clp(monto)} → {usd(resultado)}")
+    em = discord.Embed(title="💱 Cambio de Divisa Exitoso", color=COLOR_EXITO)
+    em.add_field(name="🇨🇱 Entregaste", value=clp(monto), inline=True)
+    em.add_field(name="🇺🇸 Recibiste", value=usd(resultado), inline=True)
+    em.add_field(name="📈 Tasa aplicada", value=f"1 USD = {clp(TASA_CAMBIO)}", inline=False)
+    em.set_footer(text="🏦 Banco Central de Chile")
+    await interaction.response.send_message(embed=em, ephemeral=True)
+
+@grupo_divisa.command(name="usd_a_clp", description="Convertir Dólares a Pesos Chilenos (USD → CLP)")
+@app_commands.describe(monto="Monto en USD a convertir")
+async def divisa_usd_clp(interaction: discord.Interaction, monto: float):
+    user = get_user(interaction.user.id)
+    if user["usd_banco"] < monto:
+        return await interaction.response.send_message(f"❌ Saldo USD insuficiente. Tienes **{usd(user['usd_banco'])}**.", ephemeral=True)
+    resultado = int(monto * TASA_CAMBIO)
+    user["usd_banco"] -= monto
+    user["banco"] += resultado
+    save_user(interaction.user.id, user)
+    add_historial(interaction.user.id, "DIVISA", resultado, f"Cambio {usd(monto)} → {clp(resultado)}")
+    em = discord.Embed(title="💱 Cambio de Divisa Exitoso", color=COLOR_EXITO)
+    em.add_field(name="🇺🇸 Entregaste", value=usd(monto), inline=True)
+    em.add_field(name="🇨🇱 Recibiste", value=clp(resultado), inline=True)
+    em.add_field(name="📈 Tasa aplicada", value=f"1 USD = {clp(TASA_CAMBIO)}", inline=False)
+    em.set_footer(text="🏦 Banco Central de Chile")
+    await interaction.response.send_message(embed=em, ephemeral=True)
+
+@grupo_divisa.command(name="tasa", description="Ver la tasa de cambio actual")
+async def divisa_tasa(interaction: discord.Interaction):
+    variacion = random.uniform(-2, 2)
+    em = discord.Embed(title="💱 Tasa de Cambio — Banco Central de Chile", color=COLOR_INFO)
+    em.add_field(name="🇨🇱 CLP → USD", value=f"$1.000 CLP = {usd(1000/TASA_CAMBIO)}", inline=True)
+    em.add_field(name="🇺🇸 USD → CLP", value=f"$1 USD = {clp(TASA_CAMBIO)}", inline=True)
+    em.add_field(name="📊 Variación del día", value=f"{variacion:+.2f}%", inline=False)
+    em.set_footer(text="🏦 Banco Central de Chile")
+    em.timestamp = datetime.now()
+    await interaction.response.send_message(embed=em)
+
+bot.tree.add_command(grupo_divisa)
+
+# ══════════════════════════════════════════════════════════════
+# 📊 /historial
+# ══════════════════════════════════════════════════════════════
+@bot.tree.command(guild=guild_obj, name="historial", description="📊 Ver tus últimos movimientos financieros")
 async def historial(interaction: discord.Interaction):
     user = get_user(interaction.user.id)
-    movimientos = user.get("historial", [])
-    
+    movimientos = user.get("historial", [])[:10]
+    em = discord.Embed(title="📊 Historial de Movimientos", color=COLOR_PRINCIPAL)
     if not movimientos:
-        return await interaction.response.send_message("📋 No tienes registros de movimientos recientes.", ephemeral=True)
-        
-    em = discord.Embed(title=f"📜 Movimientos Recientes — {interaction.user.display_name}", color=COLOR_PRINCIPAL)
-    texto_lineas = []
-    
-    for m in movimientos[:10]: # Muestra los últimos 10 movimientos
-        signo = "+" if m["monto"] >= 0 else ""
-        texto_lineas.append(f"⏱️ `[{m['fecha']}]` **{m['tipo']}** ({signo}{clp(m['monto'])})\n└ *{m['descripcion']}*")
-        
-    em.description = "\n".join(texto_lineas)
-    em.set_footer(text="🏦 Registro de auditoría del Banco Central")
+        em.description = "*Sin movimientos registrados.*"
+    else:
+        texto = "\n".join(
+            f"`{m['fecha']}` **{m['tipo']}** — {m['descripcion']}"
+            for m in movimientos
+        )
+        em.description = texto
+    em.set_footer(text="🏦 Banco Central de Chile | Últimos 10 movimientos")
+    em.timestamp = datetime.now()
     await interaction.response.send_message(embed=em, ephemeral=True)
 
 # ══════════════════════════════════════════════════════════════
-# 🚀 EJECUCIÓN FINAL
+# 🔥 /rachas
 # ══════════════════════════════════════════════════════════════
-if __name__ == "__main__":
-    if TOKEN == "TU_TOKEN_AQUI":
-        print("❌ ERROR: Recuerda cambiar 'TU_TOKEN_AQUI' por tu token real en el código.")
+@bot.tree.command(guild=guild_obj, name="rachas", description="🔥 Ver tu racha de días consecutivos")
+async def rachas(interaction: discord.Interaction):
+    user = get_user(interaction.user.id)
+    racha = user.get("rachas", 0)
+    if racha >= 30:
+        titulo = "🏆 ¡Leyenda del Banco!"
+    elif racha >= 14:
+        titulo = "🔥 ¡Racha Épica!"
+    elif racha >= 7:
+        titulo = "⭐ ¡Racha de Semana!"
     else:
-        bot.run(TOKEN)
+        titulo = "💪 ¡Sigue así!"
+    em = discord.Embed(title=f"🔥 {titulo}", color=COLOR_ADVERTENCIA,
+        description=f"Llevas **{racha}** días consecutivos colectando.")
+    em.add_field(name="⭐ Nivel", value=str(user.get("nivel", 1)), inline=True)
+    em.add_field(name="🎯 XP Total", value=str(user.get("experiencia", 0)), inline=True)
+    em.set_footer(text="🏦 Banco Central de Chile")
+    await interaction.response.send_message(embed=em, ephemeral=True)
+
+# ══════════════════════════════════════════════════════════════
+# 🚔 /penales
+# ══════════════════════════════════════════════════════════════
+@bot.tree.command(guild=guild_obj, name="penales", description="🚔 Ver tus penales acumulados (x1.5)")
+async def penales(interaction: discord.Interaction):
+    user = get_user(interaction.user.id)
+    p = user.get("penales", 0)
+    tanda = int(p * 1.5)
+    em = discord.Embed(title="🚔 Mis Penales", color=COLOR_ERROR)
+    em.add_field(name="📋 Penales acumulados", value=str(p), inline=True)
+    em.add_field(name="⚖️ Tanda (x1.5)", value=str(tanda), inline=True)
+    nivel_peligro = "🟢 Limpio" if p == 0 else "🟡 Vigilado" if p < 3 else "🔴 Buscado"
+    em.add_field(name="🚨 Estado", value=nivel_peligro, inline=False)
+    em.set_footer(text="🏦 Banco Central de Chile")
+    await interaction.response.send_message(embed=em, ephemeral=True)
+
+# ══════════════════════════════════════════════════════════════
+# 🏧 /cajero
+# ══════════════════════════════════════════════════════════════
+@bot.tree.command(guild=guild_obj, name="cajero", description="🏧 Abrir el Cajero Automático (ATM)")
+async def cajero(interaction: discord.Interaction):
+    user = get_user(interaction.user.id)
+    em = discord.Embed(title="🏧 Cajero Automático — Banco Central de Chile", color=COLOR_PRINCIPAL,
+        description="Usa los comandos de débito para operar:")
+    em.add_field(name="💵 Efectivo disponible", value=clp(user["efectivo"]), inline=True)
+    em.add_field(name="🏦 Saldo en banco", value=clp(user["banco"]), inline=True)
+    em.add_field(name="📋 Operaciones",
+        value="• `/debito depositar` — Depositar efectivo\n• `/debito retirar` — Retirar al efectivo\n• `/debito transferir` — Transferir a otro usuario\n• `/debito estado` — Ver estado completo",
+        inline=False)
+    em.set_footer(text="🏦 Banco Central de Chile • Gran Chile RP")
+    em.timestamp = datetime.now()
+    await interaction.response.send_message(embed=em, ephemeral=True)
+
+# ══════════════════════════════════════════════════════════════
+# 🏆 /top — Ranking del servidor
+# ══════════════════════════════════════════════════════════════
+@bot.tree.command(guild=guild_obj, name="top", description="🏆 Ver el ranking de los más ricos del servidor")
+async def top(interaction: discord.Interaction):
+    db = cargar_db()
+    usuarios = []
+    for uid, data in db["users"].items():
+        total = data.get("efectivo", 0) + data.get("banco", 0)
+        usuarios.append((uid, total, data.get("nombre_completo", f"Usuario {uid[:4]}")))
+    usuarios.sort(key=lambda x: x[1], reverse=True)
+    top10 = usuarios[:10]
+    medallas = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
+    em = discord.Embed(title="🏆 Ranking — Los más ricos de Gran Chile RP", color=COLOR_ADVERTENCIA)
+    desc = ""
+    for i, (uid, total, nombre) in enumerate(top10):
+        desc += f"{medallas[i]} **#{i+1}** {nombre or 'Desconocido'} — **{clp(total)}**\n"
+    em.description = desc or "*Sin datos*"
+    em.set_footer(text="🏦 Banco Central de Chile • Gran Chile RP")
+    em.timestamp = datetime.now()
+    await interaction.response.send_message(embed=em)
+
+# ══════════════════════════════════════════════════════════════
+# 🎰 /invertir — Inversión de riesgo rápida
+# ══════════════════════════════════════════════════════════════
+@bot.tree.command(guild=guild_obj, name="invertir", description="🎰 Hacer una inversión de riesgo (puedes ganar o perder)")
+@app_commands.describe(monto="Monto en CLP a arriesgar")
+async def invertir(interaction: discord.Interaction, monto: int):
+    user = get_user(interaction.user.id)
+    if monto < 5_000:
+        return await interaction.response.send_message("❌ Monto mínimo para invertir: **$5.000 CLP**", ephemeral=True)
+    if user["banco"] < monto:
+        return await interaction.response.send_message(f"❌ Saldo insuficiente. Tienes **{clp(user['banco'])}**.", ephemeral=True)
+    resultado = random.random()
+    if resultado < 0.10:
+        ganancia = int(monto * 3.0)
+        msg = f"💎 **¡JACKPOT!** Triplicaste tu inversión.\nGanaste **{clp(ganancia)}**"
+        color = COLOR_PREMIUM
+    elif resultado < 0.40:
+        ganancia = int(monto * 1.5)
+        msg = f"📈 ¡Buena inversión! Ganaste **{clp(ganancia - monto)}** extra."
+        color = COLOR_EXITO
+    elif resultado < 0.65:
+        ganancia = int(monto * 0.8)
+        msg = f"📉 Mala racha. Perdiste **{clp(monto - ganancia)}**."
+        color = COLOR_ERROR
+    else:
+        ganancia = 0
+        msg = f"💥 **¡Perdiste todo!** La inversión fracasó completamente."
+        color = COLOR_ERROR
+    user["banco"] = user["banco"] - monto + ganancia
+    agregar_xp(user, 5)
+    save_user(interaction.user.id, user)
+    add_historial(interaction.user.id, "INVERSIÓN", ganancia - monto, f"Inversión {clp(monto)} → {clp(ganancia)}")
+    em = discord.Embed(title="🎰 Resultado de Inversión", color=color, description=msg)
+    em.add_field(name="💵 Invertido", value=clp(monto), inline=True)
+    em.add_field(name="💰 Resultado", value=clp(ganancia), inline=True)
+    em.add_field(name="🏦 Nuevo saldo banco", value=clp(user["banco"]), inline=False)
+    em.set_footer(text="🏦 Banco Central de Chile")
+    em.timestamp = datetime.now()
+    await interaction.response.send_message(embed=em)
+
+# ══════════════════════════════════════════════════════════════
+# 🏦 /banco — Menú principal con botones (ModalView)
+# ══════════════════════════════════════════════════════════════
+
+class ModalDebitoView(discord.ui.Modal, title="💳 Solicitar Tarjeta de Débito"):
+    nombre = discord.ui.TextInput(label="Nombre Completo", placeholder="Ej: Juan Patricio González Soto")
+    ocupacion = discord.ui.TextInput(label="Ocupación", placeholder="Ej: Policía, Mecánico, Comerciante...")
+
+    async def on_submit(self, interaction: discord.Interaction):
+        user = get_user(interaction.user.id)
+        if user["tarjeta_debito"]:
+            return await interaction.response.send_message("❌ Ya tienes una tarjeta de débito activa.", ephemeral=True)
+        user["nombre_completo"] = str(self.nombre)
+        user["ocupacion"] = str(self.ocupacion)
+        user["registrado"] = True
+        user["tarjeta_debito"] = {"numero": generar_numero_tarjeta(), "fecha_emision": datetime.now().strftime("%d/%m/%Y"), "activa": True}
+        agregar_xp(user, 50)
+        save_user(interaction.user.id, user)
+        add_historial(interaction.user.id, "TARJETA_DÉBITO", 0, "Tarjeta de débito emitida")
+        em = discord.Embed(title="✅ ¡Tarjeta de Débito Emitida!", color=COLOR_EXITO)
+        em.add_field(name="👤 Titular", value=str(self.nombre), inline=True)
+        em.add_field(name="💼 Ocupación", value=str(self.ocupacion), inline=True)
+        em.add_field(name="💳 Número", value=f"`{user['tarjeta_debito']['numero']}`", inline=False)
+        em.add_field(name="📅 Emisión", value=user["tarjeta_debito"]["fecha_emision"], inline=True)
+        em.set_footer(text="🏦 Banco Central de Chile")
+        await interaction.response.send_message(embed=em, ephemeral=True)
+
+class ModalCreditoView(discord.ui.Modal, title="💎 Solicitar Tarjeta de Crédito"):
+    ingresos = discord.ui.TextInput(label="Ingresos Mensuales (CLP)", placeholder="Ej: 500000")
+    motivo = discord.ui.TextInput(label="Motivo de la Solicitud", style=discord.TextInputStyle.paragraph,
+                                   placeholder="¿Para qué usarás la tarjeta de crédito?")
+
+    async def on_submit(self, interaction: discord.Interaction):
+        user = get_user(interaction.user.id)
+        if not user["tarjeta_debito"]:
+            return await interaction.response.send_message("❌ Primero necesitas una **tarjeta de débito**.", ephemeral=True)
+        if user["tarjeta_credito"]:
+            tc = TIPO_TARJETA[user["tarjeta_credito"]]
+            return await interaction.response.send_message(f"❌ Ya tienes tarjeta **{tc['emoji']} {tc['nombre']}**.", ephemeral=True)
+        try:
+            ing = int(str(self.ingresos).replace(".", "").replace(",", "").replace("$", "").replace(" ", ""))
+        except:
+            return await interaction.response.send_message("❌ Ingresa un monto válido.", ephemeral=True)
+        if ing >= 5_000_000: nivel = "diamante"
+        elif ing >= 2_000_000: nivel = "platinum"
+        elif ing >= 1_000_000: nivel = "oro"
+        elif ing >= 500_000: nivel = "plata"
+        else: nivel = "clasica"
+        tc = TIPO_TARJETA[nivel]
+        user["tarjeta_credito"] = nivel
+        user["limite_credito"] = tc["limite"]
+        user["ingresos"] = ing
+        agregar_xp(user, 100)
+        save_user(interaction.user.id, user)
+        add_historial(interaction.user.id, "TARJETA_CRÉDITO", 0, f"Tarjeta {tc['nombre']} emitida")
+        em = discord.Embed(title=f"{tc['emoji']} ¡Tarjeta de Crédito {tc['nombre']} Aprobada!", color=tc["color"])
+        em.add_field(name="💳 Tipo", value=f"{tc['emoji']} {tc['nombre']}", inline=True)
+        em.add_field(name="💰 Límite", value=clp(tc["limite"]), inline=True)
+        em.add_field(name="💵 Ingresos declarados", value=clp(ing), inline=True)
+        em.set_footer(text="🏦 Banco Central de Chile")
+        await interaction.response.send_message(embed=em, ephemeral=True)
+
+class ModalPrestamoView(discord.ui.Modal, title="💰 Solicitar Préstamo"):
+    monto_input = discord.ui.TextInput(label="Monto Solicitado (CLP)", placeholder="Ej: 1000000")
+    plazo_input = discord.ui.TextInput(label="Plazo de pago (1, 2 o 3 semanas)", placeholder="Ej: 2")
+    motivo_input = discord.ui.TextInput(label="Motivo del Préstamo", style=discord.TextInputStyle.paragraph,
+                                         placeholder="¿Para qué necesitas el préstamo?")
+
+    async def on_submit(self, interaction: discord.Interaction):
+        user = get_user(interaction.user.id)
+        try:
+            monto = int(str(self.monto_input).replace(".", "").replace(",", "").replace("$", "").replace(" ", ""))
+            semanas = max(1, min(3, int(str(self.plazo_input).strip())))
+        except:
+            return await interaction.response.send_message("❌ Datos inválidos.", ephemeral=True)
+        if monto < 10_000:
+            return await interaction.response.send_message("❌ Monto mínimo: **$10.000 CLP**.", ephemeral=True)
+        tasas = {1: 0.05, 2: 0.10, 3: 0.15}
+        interes = tasas[semanas]
+        total = int(monto * (1 + interes))
+        cuota = total // semanas
+        user["prestamos"].append({"id": int(datetime.now().timestamp()), "monto": monto, "total": total,
+            "cuota": cuota, "semanas": semanas, "semanas_restantes": semanas, "motivo": str(self.motivo_input)})
+        user["banco"] += monto
+        agregar_xp(user, 20)
+        save_user(interaction.user.id, user)
+        add_historial(interaction.user.id, "PRÉSTAMO", monto, f"Préstamo {clp(monto)} a {semanas} semana(s)")
+        em = discord.Embed(title="✅ ¡Préstamo Aprobado!", color=COLOR_EXITO,
+            description="El monto ha sido depositado en tu cuenta bancaria.")
+        em.add_field(name="💵 Monto recibido", value=clp(monto), inline=True)
+        em.add_field(name="📅 Plazo", value=f"{semanas} semana(s)", inline=True)
+        em.add_field(name="📈 Interés", value=f"{int(interes*100)}%", inline=True)
+        em.add_field(name="💰 Total a pagar", value=clp(total), inline=True)
+        em.add_field(name="📋 Cuota semanal", value=clp(cuota), inline=True)
+        em.set_footer(text="🏦 Banco Central de Chile | Usa /prestamo ver para gestionar")
+        await interaction.response.send_message(embed=em, ephemeral=True)
+
+class BancoMenuView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+    @discord.ui.select(placeholder="🏦 Selecciona un servicio bancario", options=[
+        discord.SelectOption(label="Solicitar Tarjeta de Débito",  value="debito",   emoji="💳", description="Tarjeta de débito en CLP"),
+        discord.SelectOption(label="Solicitar Tarjeta de Crédito", value="credito",  emoji="💎", description="Tarjeta con línea de crédito"),
+        discord.SelectOption(label="Solicitar Préstamo",           value="prestamo", emoji="💰", description="Créditos personales"),
+        discord.SelectOption(label="Estado de Cuenta",             value="estado",   emoji="📊", description="Ver saldos y movimientos"),
+        discord.SelectOption(label="Cambio de Divisa",             value="divisa",   emoji="💱", description="CLP ⇌ USD"),
+        discord.SelectOption(label="Mis Tarjetas",                 value="tarjetas", emoji="🗂️", description="Ver mis tarjetas activas"),
+    ])
+    async def menu_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        val = select.values[0]
+        if val == "debito":
+            await interaction.response.send_modal(ModalDebitoView())
+        elif val == "credito":
+            await interaction.response.send_modal(ModalCreditoView())
+        elif val == "prestamo":
+            await interaction.response.send_modal(ModalPrestamoView())
+        elif val == "estado":
+            user = get_user(interaction.user.id)
+            tc = TIPO_TARJETA.get(user["tarjeta_credito"]) if user["tarjeta_credito"] else None
+            h = user.get("historial", [])[:5]
+            em = discord.Embed(title="📊 Estado de Cuenta", color=COLOR_PRINCIPAL)
+            em.set_thumbnail(url=interaction.user.display_avatar.url)
+            em.add_field(name="🇨🇱 Saldos CLP", value=f"💵 Efectivo: **{clp(user['efectivo'])}**\n🏦 Banco: **{clp(user['banco'])}**", inline=True)
+            em.add_field(name="🇺🇸 Saldos USD", value=f"💵 Efectivo: **{usd(user['usd'])}**\n🏦 Banco: **{usd(user['usd_banco'])}**", inline=True)
+            em.add_field(name="💳 Tarjetas",
+                value=f"**Débito:** {'✅ Activa' if user['tarjeta_debito'] else '❌ Sin tarjeta'}\n**Crédito:** {f\"{tc['emoji']} {tc['nombre']}\" if tc else '❌ Sin tarjeta'}" +
+                      (f"\n**Límite:** {clp(user['limite_credito'])}\n**Deuda:** {clp(user['deuda_credito'])}\n**Disponible:** {clp(user['limite_credito']-user['deuda_credito'])}" if tc else ""),
+                inline=False)
+            em.add_field(name="📋 Préstamos activos", value=f"{len(user.get('prestamos',[]))} préstamo(s)", inline=True)
+            em.add_field(name="🕐 Últimos movimientos",
+                value="\n".join(f"`{m['fecha']}` {m['descripcion']}" for m in h) if h else "*Sin movimientos*",
+                inline=False)
+            em.set_footer(text="🏦 Banco Central de Chile")
+            em.timestamp = datetime.now()
+            await interaction.response.send_message(embed=em, ephemeral=True)
+        elif val == "divisa":
+            em = discord.Embed(title="💱 Cambio de Divisa", color=COLOR_INFO,
+                description=f"Tasa actual: **1 USD = {clp(TASA_CAMBIO)}**\n\nUsa los comandos:\n• `/divisa clp_a_usd`\n• `/divisa usd_a_clp`\n• `/divisa tasa`")
+            em.set_footer(text="🏦 Banco Central de Chile")
+            await interaction.response.send_message(embed=em, ephemeral=True)
+        elif val == "tarjetas":
+            user = get_user(interaction.user.id)
+            tc = TIPO_TARJETA.get(user["tarjeta_credito"]) if user["tarjeta_credito"] else None
+            em = discord.Embed(title="🗂️ Mis Tarjetas", color=COLOR_PRINCIPAL)
+            em.add_field(name="💳 Tarjeta de Débito",
+                value=(f"✅ **Activa**\nNúmero: `{user['tarjeta_debito']['numero']}`\nTitular: {user.get('nombre_completo','?')}\nEmisión: {user['tarjeta_debito']['fecha_emision']}" if user["tarjeta_debito"] else "❌ Sin tarjeta\nUsa el menú para solicitar una."),
+                inline=False)
+            em.add_field(name=f"{tc['emoji'] if tc else '💎'} Tarjeta de Crédito",
+                value=(f"✅ **{tc['nombre']}** Activa\nLímite: **{clp(user['limite_credito'])}**\nDeuda: **{clp(user['deuda_credito'])}**\nDisponible: **{clp(user['limite_credito']-user['deuda_credito'])}**" if tc else "❌ Sin tarjeta\nUsa el menú para solicitar una."),
+                inline=False)
+            em.set_footer(text="🏦 Banco Central de Chile")
+            await interaction.response.send_message(embed=em, ephemeral=True)
+
+    @discord.ui.button(label="⚡ Crédito Express", style=discord.ButtonStyle.green)
+    async def btn_credito(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ModalCreditoView())
+
+    @discord.ui.button(label="📊 Estado de Cuenta", style=discord.ButtonStyle.blurple)
+    async def btn_estado(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user = get_user(interaction.user.id)
+        em = discord.Embed(title="📊 Estado de Cuenta Rápido", color=COLOR_PRINCIPAL)
+        em.add_field(name="💵 Efectivo", value=clp(user["efectivo"]), inline=True)
+        em.add_field(name="🏦 Banco", value=clp(user["banco"]), inline=True)
+        em.add_field(name="🇺🇸 USD", value=usd(user["usd_banco"]), inline=True)
+        em.set_footer(text="🏦 Banco Central de Chile")
+        await interaction.response.send_message(embed=em, ephemeral=True)
+
+    @discord.ui.button(label="💳 Mis Tarjetas", style=discord.ButtonStyle.gray)
+    async def btn_tarjetas(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user = get_user(interaction.user.id)
+        tc = TIPO_TARJETA.get(user["tarjeta_credito"]) if user["tarjeta_credito"] else None
+        em = discord.Embed(title="🗂️ Mis Tarjetas", color=COLOR_PRINCIPAL)
+        em.add_field(name="💳 Débito", value="✅ Activa" if user["tarjeta_debito"] else "❌ Sin tarjeta", inline=True)
+        em.add_field(name="💎 Crédito", value=f"{tc['emoji']} {tc['nombre']}" if tc else "❌ Sin tarjeta", inline=True)
+        em.set_footer(text="🏦 Banco Central de Chile")
+        await interaction.response.send_message(embed=em, ephemeral=True)
+
+@bot.tree.command(guild=guild_obj, name="banco", description="🏦 Acceder al Banco Central de Chile")
+async def banco(interaction: discord.Interaction):
+    em = discord.Embed(
+        title="🏦 BANCO CENTRAL DE CHILE",
+        description="**Bienvenido al Banco Central de Chile — Gran Chile RP**\n\nSelecciona el servicio que necesitas del menú o usa los botones rápidos.",
+        color=COLOR_PRINCIPAL
+    )
+    em.add_field(name="📋 Servicios Disponibles", value=(
+        "💳 **Tarjetas** — Crédito y débito\n"
+        "💰 **Créditos** — Préstamos personales\n"
+        "📊 **Consultas** — Estado de cuenta y movimientos\n"
+        "💱 **Cambio de Divisa** — CLP ⇌ USD\n"
+        "🗂️ **Mis Tarjetas** — Ver tarjetas activas"
+    ), inline=False)
+    em.add_field(name="⏰ Horario", value="🕐 24/7 (Servicio Automático)", inline=False)
+    em.set_footer(text="🏦 Banco Central de Chile • Gran Chile RP")
+    em.timestamp = datetime.now()
+    await interaction.response.send_message(embed=em, view=BancoMenuView())
+
+# ══════════════════════════════════════════════════════════════
+# 🚀 INICIAR BOT
+# ══════════════════════════════════════════════════════════════
+bot.run(TOKEN)
