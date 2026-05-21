@@ -20,8 +20,9 @@ def keep_alive():
 # ║                      Archivo:principal.py                      ║
 # ╚════════════════════════════════════════════════════════════════╝
 
-INSTALACIÓN:
-  pip install discord.py
+# INSTALACIÓN:
+# pip install discord.py
+# CONFIGURACIÓN:
 
 CONFIGURACIÓN:
   Cambia TOKEN, CLIENT_ID y GUILD_ID abajo antes de ejecutar.
