@@ -14,11 +14,11 @@ def run():
 def keep_alive():
     t = Thread(target=run)
     t.start()
-╔══════════════════════════════════════════════════════════════╗
-║       🏦 BANCO ALIANZA SANTANDER — Gran Chile RP            ║
-║                     Bot de Discord                           ║
-║                    Archivo: main.py                          ║
-╚══════════════════════════════════════════════════════════════╝
+# ╔════════════════════════════════════════════════════════════════╗
+# ║ 🏦BANCO ALIANZA SANTANDER-Gran Chile rol                       ║
+# ║                      Bot Delaware Discordia                    ║
+# ║                      Archivo:principal.py                      ║
+# ╚════════════════════════════════════════════════════════════════╝
 
 INSTALACIÓN:
   pip install discord.py
