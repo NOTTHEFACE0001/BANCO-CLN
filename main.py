@@ -1317,7 +1317,7 @@ class ModalPrestamoView(discord.ui.Modal, title="💰 Solicitar Préstamo"):
     plazo_input = discord.ui.TextInput(label="Plazo de pago (1, 2 o 3 semanas)", placeholder="Ej: 2")
     motivo_input = discord.ui.TextInput(
         label="Motivo del Préstamo",
-        style=discord.TextInputStyle.paragraph,
+       style=discord.TextStyle.paragraph,
         placeholder="¿Para qué necesitas el préstamo?"
     )
 
