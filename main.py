@@ -202,8 +202,11 @@ def get_precios_acciones(db: dict) -> dict:
         guardar_db(db)
     return db["acciones_precios"]
 
-def agregar_xp(user: dict, cantidad: int) -> tuple:
-    """Agrega XP y retorna (nivel_actual, subio_de_nivel)"""
+def agregar_xp(user, monto): # O como se llame tu función
+    """
+    Agrega XP y retorna (nivel_actual, subio_de_nivel)
+    """
+    # Aquí sigue tu código normal...
     user["experiencia"] = user.get("experiencia", 0) + cantidad
     nivel_viejo = user.get("nivel", 1)
     nivel_nuevo = 1 + int(user["experiencia"] ** 0.4 / 3)
