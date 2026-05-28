@@ -17,6 +17,7 @@
 # ══════════════════════════════════════════════════════════════
 # 🌐 KEEP ALIVE
 # ══════════════════════════════════════════════════════════════
+import os
 from flask import Flask
 from threading import Thread
 
@@ -24,15 +25,19 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "🏦 BANCO ALIANZA SANTANDER ONLINE!"
+    return "Bot Online"
 
 def run():
-    app.run(host='0.0.0.0', port=10000)
+    # IMPORTANTE: Esto lee el puerto dinámico que te da Railway o Render
+    # Si no encuentra ninguno, usa el 8080 por defecto
+    puerto = int(os.environ.get("PORT", 8080))
+    
+    # Forzamos a que use el host 0.0.0.0 y el puerto dinámico
+    app.run(host='0.0.0.0', port=puerto)
 
 def keep_alive():
     t = Thread(target=run)
     t.start()
-
 # ══════════════════════════════════════════════════════════════
 # 📦 IMPORTS
 # ══════════════════════════════════════════════════════════════
