@@ -1686,4 +1686,7 @@ keep_alive()
 TOKEN = os.environ.get("TOKEN")
 bot.run(TOKEN)
 ENDOFFILE
-echo "✅ Listo: $(wc -l < /mnt/user-data/outputs/main.py) líneas"
+import os
+
+# Así es como se ejecutan comandos de terminal dentro de Python
+os.system('echo "✅ Listo: $(wc -l < /mnt/user-data/outputs/main.py)"')
