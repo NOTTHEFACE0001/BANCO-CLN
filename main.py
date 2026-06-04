@@ -265,6 +265,8 @@ async def balanza(interaction: discord.Interaction):
     # ── Identidad ──
     if user["registrado"]:
         id_val = f"```{user['nombre_completo']}```*{user['ocupacion']}*"
+    else:
+        # id_val = "```No registrado```Usa `/banco` → Solicitar Tarjeta de Débito"
 
     # ── Tarjetas ──
     deb = "✅ Activa" if user["tarjeta_debito"] else "❌ Sin tarjeta"
@@ -364,7 +366,6 @@ async def balanza(interaction: discord.Interaction):
     em.timestamp = datetime.now()
 
     await interaction.response.send_message(embed=em, ephemeral=True)
-
 # ══════════════════════════════════════════════════════════════
 # 👤 /perfil
 # ══════════════════════════════════════════════════════════════
