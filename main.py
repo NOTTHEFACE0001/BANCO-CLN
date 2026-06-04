@@ -245,77 +245,126 @@ async def actualizar_precios():
 # ══════════════════════════════════════════════════════════════
 # ⚖️  /balanza — PERSONALIZADA BANCO ALIANZA SANTANDER
 # ══════════════════════════════════════════════════════════════
+# REEMPLAZA el comando /balanza en tu main.py por este:
+
 @bot.tree.command(guild=guild_obj, name="balanza",
-    description="⚖️ Ver tu balance financiero personal — Banco Alianza Santander")
+    description="⚖️ Ver tu resumen financiero — Banco Alianza Santander")
 async def balanza(interaction: discord.Interaction):
     user = get_user(interaction.user.id)
-    tc = TIPO_TARJETA.get(user["tarjeta_credito"]) if user["tarjeta_credito"] else None
-    db = cargar_db()
+    tc   = TIPO_TARJETA.get(user["tarjeta_credito"]) if user["tarjeta_credito"] else None
+    db   = cargar_db()
     precios = get_precios_cripto(db)
 
-    # Calcular valor total de cripto
     valor_cripto = sum(
         int(v * precios.get(k, 0))
         for k, v in user.get("cripto", {}).items() if v > 0
     )
-    cripto_txt = "\n".join(
-        f"{CRIPTO_INFO.get(k,{}).get('icon','🪙')} **{k}:** {v:.6f}"
-        for k, v in user.get("cripto", {}).items() if v > 0.000001
-    ) or "*Sin saldo cripto*"
-
     patrimonio_clp = user["efectivo"] + user["banco"] + valor_cripto
-    patrimonio_usd = user["usd"] + user["usd_banco"]
+    patrimonio_usd  = user["usd"] + user["usd_banco"]
 
-    identidad_val = (
-        f"**{user['nombre_completo']}**\n*{user['ocupacion']}*"
-        if user["registrado"] else "*No registrado como ciudadano*\nUsa `/banco` para registrarte"
-    )
-    credito_val = f"{tc['emoji']} {tc['nombre']}" if tc else "❌ Sin tarjeta"
-    autos_count = len(user.get("autos", []))
-    autos_val = f"**{autos_count}** vehículo(s) registrado(s)" if autos_count > 0 else "*Sin vehículos registrados*"
+    # ── Identidad ──
+    if user["registrado"]:
+        id_val = f"```{user['nombre_completo']}```*{user['ocupacion']}*"
+    else:
+        id_val = "```No registrado```Usa `/banco` → Solicitar Tarjeta de Débito"
 
-    em = discord.Embed(
-        title=f"⚖️ Balanza Financiera — Banco Alianza Santander",
-        description=f"Estado financiero de **{interaction.user.display_name}**",
-        color=COLOR_PRINCIPAL
+    # ── Tarjetas ──
+    deb = "✅ Activa" if user["tarjeta_debito"] else "❌ Sin tarjeta"
+    cred = f"{tc['emoji']} {tc['nombre']}" if tc else "❌ Sin tarjeta"
+
+    # ── Cripto ──
+    cripto_lineas = [
+        f"{CRIPTO_INFO.get(k,{}).get('icon','🪙')} {k}: **{v:.4f}**"
+        for k, v in user.get("cripto", {}).items() if v > 0.000001
+    ]
+    cripto_val = "\n".join(cripto_lineas) if cripto_lineas else "*Vacía*"
+
+    # ── Vehículos ──
+    n_autos = len(user.get("autos", []))
+    autos_val = f"**{n_autos}** registrado(s)" if n_autos else "*Sin vehículos*"
+
+    # ── Nivel / estado ──
+    nivel  = user.get("nivel", 1)
+    racha  = user.get("rachas", 0)
+    penal  = user.get("penales", 0)
+    estado = "🟢 Limpio" if penal == 0 else ("🟡 Vigilado" if penal < 3 else "🔴 Buscado")
+
+    em = discord.Embed(color=COLOR_PRINCIPAL)
+
+    # Título con nombre dinámico
+    em.set_author(
+        name=f"🏦 Banco Alianza Santander  •  Gran Chile RP",
     )
+    em.title = f"📋 Resumen Financiero de {interaction.user.display_name}"
     em.set_thumbnail(url=interaction.user.display_avatar.url)
-    em.set_author(name="🏦 Banco Alianza Santander | Gran Chile RP",
-                  icon_url="https://i.imgur.com/placeholder.png")
-    em.add_field(name="━━━ 👤 IDENTIDAD ━━━", value=identidad_val, inline=False)
+
+    # Bloque 1 — Identidad
+    em.add_field(name="👤  Ciudadano", value=id_val, inline=False)
+
+    # Bloque 2 — Dinero en CLP
     em.add_field(
-        name="🇨🇱 CLP — Pesos Chilenos",
+        name="🇨🇱  Pesos Chilenos (CLP)",
         value=(
-            f"💵 **Efectivo:** {clp(user['efectivo'])}\n"
-            f"🏦 **Banco:** {clp(user['banco'])}\n"
-            f"💳 **Deuda Crédito:** {clp(user['deuda_credito'])}\n"
-            f"💰 **Crédito Disponible:** {clp(max(0, user['limite_credito'] - user['deuda_credito']))}"
-        ), inline=True
+            f"💵 Efectivo: **{clp(user['efectivo'])}**\n"
+            f"🏦 Banco:    **{clp(user['banco'])}**\n"
+            f"💳 Deuda:   **{clp(user['deuda_credito'])}**\n"
+            f"💰 Crédito libre: **{clp(max(0, user['limite_credito'] - user['deuda_credito']))}**"
+        ),
+        inline=True,
     )
+
+    # Bloque 3 — USD
     em.add_field(
-        name="🇺🇸 USD — Dólares",
-        value=f"💵 **Efectivo:** {usd(user['usd'])}\n🏦 **Banco:** {usd(user['usd_banco'])}", inline=True
+        name="🇺🇸  Dólares (USD)",
+        value=(
+            f"💵 Efectivo: **{usd(user['usd'])}**\n"
+            f"🏦 Banco:    **{usd(user['usd_banco'])}**"
+        ),
+        inline=True,
     )
-    em.add_field(name="\u200b", value="\u200b", inline=False)
+
+    em.add_field(name="\u200b", value="\u200b", inline=False)  # separador
+
+    # Bloque 4 — Tarjetas
     em.add_field(
-        name="💳 Tarjetas",
-        value=f"**Débito:** {'✅ Activa' if user['tarjeta_debito'] else '❌ Sin tarjeta'}\n**Crédito:** {credito_val}",
-        inline=True
+        name="💳  Tarjetas",
+        value=f"Débito:  {deb}\nCrédito: {cred}",
+        inline=True,
     )
-    em.add_field(name="🪙 Billetera Cripto",
-        value=f"{cripto_txt}\n💹 Valor total: **{clp(valor_cripto)}**" if valor_cripto > 0 else cripto_txt,
-        inline=True)
-    em.add_field(name="🚗 Vehículos", value=autos_val, inline=True)
+
+    # Bloque 5 — Cripto
     em.add_field(
-        name="━━━ 📊 PATRIMONIO TOTAL ━━━",
-        value=f"🇨🇱 **{clp(patrimonio_clp)}** *(incluye cripto)*\n🇺🇸 **{usd(patrimonio_usd)}**",
-        inline=False
+        name=f"🪙  Cartera Cripto  *(+{clp(valor_cripto)})*",
+        value=cripto_val,
+        inline=True,
     )
-    em.add_field(name="⭐ Nivel", value=f"**{user.get('nivel',1)}** | XP: {user.get('experiencia',0)}", inline=True)
-    em.add_field(name="🔥 Racha colectar", value=f"**{user.get('rachas',0)}** días", inline=True)
-    em.add_field(name="🚔 Penales", value=str(user.get("penales",0)), inline=True)
-    em.set_footer(text="🏦 Banco Alianza Santander • Gran Chile RP | Información financiera personal y confidencial")
+
+    # Bloque 6 — Autos
+    em.add_field(
+        name="🚗  Vehículos",
+        value=autos_val,
+        inline=True,
+    )
+
+    # Bloque 7 — Patrimonio (resaltado)
+    em.add_field(
+        name="━━━━━━━━━━━━━━━━━━━━━━━━━",
+        value=(
+            f"**💎 PATRIMONIO TOTAL**\n"
+            f"🇨🇱  `{clp(patrimonio_clp)}`  *(incluye cripto)*\n"
+            f"🇺🇸  `{usd(patrimonio_usd)}`"
+        ),
+        inline=False,
+    )
+
+    # Bloque 8 — Stats rápidos
+    em.add_field(name="⭐ Nivel",  value=f"**{nivel}** | {user.get('experiencia',0)} XP", inline=True)
+    em.add_field(name="🔥 Racha",  value=f"**{racha}** días",                              inline=True)
+    em.add_field(name="🚨 Estado", value=estado,                                            inline=True)
+
+    em.set_footer(text="🏦 Banco Alianza Santander  •  Gran Chile RP  |  Información confidencial")
     em.timestamp = datetime.now()
+
     await interaction.response.send_message(embed=em, ephemeral=True)
 
 # ══════════════════════════════════════════════════════════════
