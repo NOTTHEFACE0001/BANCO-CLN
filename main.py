@@ -1842,5 +1842,5 @@ keep_alive()
 TOKEN = os.environ.get("TOKEN")
 bot.run(TOKEN)
 PYEOF
-echo "✅ Archivo creado: $(wc -l < /home/claude/main_final.py) líneas"
+# echo "✅ Archivo creado: $(wc -l < /home/claude/main_final.py) líneas"
 Salida
