@@ -1,4 +1,4 @@
-cat > /home/claude/main_final.py << 'PYEOF'
+# cat > /home/claude/main_final.py << 'PYEOF'
 # ╔════════════════════════════════════════════════════════════════╗
 # ║     🏦 BANCO ALIANZA SANTANDER — Gran Chile RP                ║
 # ║   Cripto x15 + Autos + Bolsa + Balanza Personalizada          ║
